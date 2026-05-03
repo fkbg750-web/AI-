@@ -3,7 +3,6 @@ Orchestrator Agent - 任务编排器
 负责任务理解、分解、调度和结果聚合
 """
 import json
-from typing import Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -12,7 +11,7 @@ try:
 except ImportError:  # pragma: no cover - used when running mocked tests without deps
     Anthropic = object
 
-from src.agents.utils import maybe_await
+from src.agents.utils import maybe_await, parse_json_object, to_plain_dict
 
 
 class IntentType(Enum):
@@ -41,14 +40,15 @@ class OrchestratorResult:
     intent: IntentType
     sub_tasks: list[Task]
     success: bool = True
-    final_response: Optional[str] = None
+    final_response: str | None = None
     context_used: list[dict] = field(default_factory=list)
-    answer: Optional[str] = None
+    answer: str | None = None
     sources: list[dict] = field(default_factory=list)
     extracted_entities: list[dict] = field(default_factory=list)
     comprehended_summary: str = ""
     related_relations: list[dict] = field(default_factory=list)
-    error: Optional[str] = None
+    storage_result: dict | None = None
+    error: str | None = None
 
 
 class OrchestratorAgent:
@@ -80,7 +80,7 @@ class OrchestratorAgent:
 
 请用 JSON 格式输出：
 {
-    "intent": "qa|add_knowledge|query_relations|summary|other",
+    "intent": "query|store|query_relations|summary|other",
     "sub_tasks": [
         {
             "name": "任务名称",
@@ -92,11 +92,25 @@ class OrchestratorAgent:
 }
 """
 
-    def __init__(self, anthropic_client: Anthropic, store_agent=None):
+    def __init__(
+        self,
+        anthropic_client: Anthropic,
+        extract_agent=None,
+        comprehend_agent=None,
+        relate_agent=None,
+        store_agent=None,
+        vector_store=None,
+        graph_store=None,
+    ):
         self.client = anthropic_client
+        self.extract_agent = extract_agent
+        self.comprehend_agent = comprehend_agent
+        self.relate_agent = relate_agent
         self.store_agent = store_agent
+        self.vector_store = vector_store
+        self.graph_store = graph_store
 
-    async def process(self, user_input: str, context: Optional[dict] = None) -> OrchestratorResult:
+    async def process(self, user_input: str, context: dict | None = None) -> OrchestratorResult:
         """
         处理用户输入
 
@@ -116,33 +130,27 @@ class OrchestratorAgent:
 
 请分析用户意图并制定任务计划。"""
 
-        # 调用 LLM
-        response = await maybe_await(self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=self.SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
-        ))
-
-        # 解析响应
-        result_text = response.content[0].text
         try:
-            result_json = json.loads(result_text)
-        except json.JSONDecodeError:
-            # 降级处理：简单分类
+            response = await maybe_await(self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                system=self.SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}]
+            ))
+            result_json = parse_json_object(response.content[0].text)
+        except Exception:
             return self._fallback_process(user_input)
 
-        # 构建返回结果
         intent = self._parse_intent(result_json.get("intent", "other"))
-        sub_tasks = [
-            Task(
-                name=t["name"],
-                agent=t["agent"],
-                input_data=t.get("input_data", {}),
-                depends_on=t.get("depends_on", [])
-            )
-            for t in result_json.get("sub_tasks", [])
-        ]
+        sub_tasks = self._parse_tasks(result_json.get("sub_tasks", []))
+        if not sub_tasks:
+            sub_tasks = self._default_tasks_for_intent(intent, user_input)
+
+        if intent == IntentType.STORE:
+            return await self._process_store(user_input, sub_tasks, context or {})
+
+        if intent == IntentType.QUERY:
+            return await self.query(user_input, context=context)
 
         return OrchestratorResult(
             intent=intent,
@@ -150,11 +158,25 @@ class OrchestratorAgent:
             success=True,
         )
 
-    async def query(self, question: str, context: Optional[dict] = None) -> OrchestratorResult:
-        """Build a minimal query result for CLI/tests until full retrieval lands."""
+    async def query(self, question: str, context: dict | None = None) -> OrchestratorResult:
+        """Run a minimal query flow over configured stores."""
         context = context or {}
-        sources = context.get("sources", [])
-        answer = context.get("answer") or "查询流程已识别，等待接入混合检索结果。"
+        sources = list(context.get("sources", []))
+
+        if self.vector_store:
+            try:
+                sources.extend(await self.vector_store.search(question, limit=5))
+            except Exception as exc:
+                sources.append({"info_type": "error", "content": f"向量检索失败: {exc}"})
+
+        answer = context.get("answer")
+        if not answer and sources:
+            first = sources[0]
+            summary = first.get("summary") or first.get("content", "")
+            answer = summary or "已找到相关知识，但缺少摘要内容。"
+        if not answer:
+            answer = "查询流程已识别，等待接入混合检索结果。"
+
         return OrchestratorResult(
             intent=IntentType.QUERY,
             sub_tasks=[
@@ -166,6 +188,82 @@ class OrchestratorAgent:
             final_response=answer,
             sources=sources,
             context_used=sources,
+        )
+
+    async def _process_store(
+        self,
+        content: str,
+        sub_tasks: list[Task],
+        context: dict,
+    ) -> OrchestratorResult:
+        """Execute the store pipeline when agents are available."""
+        from src.agents.comprehender import ComprehendAgent
+        from src.agents.extractor import ExtractAgent
+        from src.agents.relater import RelateAgent
+
+        extract_agent = self.extract_agent or ExtractAgent(self.client)
+        comprehend_agent = self.comprehend_agent or ComprehendAgent(self.client)
+        relate_agent = self.relate_agent or RelateAgent(self.client)
+
+        metadata = context.get("metadata", {})
+        source_type = context.get("source_type", "manual")
+        source_id = context.get("source_id", "")
+
+        extract_result = await extract_agent.extract(
+            content=content,
+            source_type=source_type,
+            source_id=source_id,
+            metadata=metadata,
+        )
+        extract_dict = extract_agent.to_dict(extract_result)
+
+        comprehend_result = await comprehend_agent.comprehend(
+            content=content,
+            extract_result=extract_dict,
+        )
+        comprehend_dict = comprehend_agent.to_dict(comprehend_result)
+
+        relate_result = await relate_agent.relate(
+            entities=extract_result.entities,
+            comprehend_result=comprehend_dict,
+            existing_context=context.get("existing_context"),
+        )
+        relate_dict = relate_agent.to_dict(relate_result)
+
+        storage_dict = None
+        storage_error = None
+        if self.store_agent:
+            storage_result = await maybe_await(self.store_agent.process(
+                content=content,
+                extract_result=extract_dict,
+                comprehend_result=comprehend_dict,
+                relate_result=relate_dict,
+                metadata=metadata,
+            ))
+            storage_dict = to_plain_dict(storage_result)
+            storage_error = storage_dict.get("error")
+
+        stored = bool(storage_dict and (
+            storage_dict.get("vector_stored") or storage_dict.get("graph_stored")
+        ))
+        final_response = "知识已解析"
+        if stored:
+            final_response += "并写入知识库。"
+        elif storage_error:
+            final_response += f"，但存储失败：{storage_error}"
+        else:
+            final_response += "，但当前未配置存储后端。"
+
+        return OrchestratorResult(
+            intent=IntentType.STORE,
+            sub_tasks=sub_tasks,
+            success=storage_error is None,
+            final_response=final_response,
+            extracted_entities=extract_dict.get("entities", []),
+            comprehended_summary=comprehend_dict.get("summary", ""),
+            related_relations=relate_dict.get("relations", []),
+            storage_result=storage_dict,
+            error=storage_error,
         )
 
     def _parse_intent(self, value: str) -> IntentType:
@@ -182,29 +280,46 @@ class OrchestratorAgent:
         except ValueError:
             return IntentType.OTHER
 
-    def _fallback_process(self, user_input: str) -> OrchestratorResult:
-        """降级处理：简单规则匹配"""
-        # 简单关键词判断
-        if any(kw in user_input for kw in ["是什么", "怎么", "为什么", "谁", "?"]):
-            intent = IntentType.QUERY
-            tasks = [
-                Task(
-                    name="检索知识",
-                    agent="retrieve",
-                    input_data={"query": user_input}
-                )
-            ]
-        elif any(kw in user_input for kw in ["添加", "记录", "告诉", "分享"]):
-            intent = IntentType.STORE
-            tasks = [
+    def _parse_tasks(self, tasks: list[dict]) -> list[Task]:
+        """Convert raw task dictionaries into Task objects."""
+        parsed = []
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            parsed.append(Task(
+                name=task.get("name", task.get("agent", "task")),
+                agent=task.get("agent", "unknown"),
+                input_data=task.get("input_data", {}),
+                depends_on=task.get("depends_on", []),
+            ))
+        return parsed
+
+    def _default_tasks_for_intent(self, intent: IntentType, user_input: str) -> list[Task]:
+        """Create a deterministic fallback plan for each supported intent."""
+        if intent == IntentType.STORE:
+            return [
                 Task(name="提取信息", agent="extract", input_data={"content": user_input}),
                 Task(name="理解语义", agent="comprehend", input_data={}, depends_on=["提取信息"]),
                 Task(name="关联关系", agent="relate", input_data={}, depends_on=["理解语义"]),
                 Task(name="存储知识", agent="store", input_data={}, depends_on=["关联关系"]),
             ]
+        if intent == IntentType.QUERY:
+            return [
+                Task(name="检索知识", agent="retrieve", input_data={"query": user_input}),
+                Task(name="生成回答", agent="generate", input_data={"query": user_input}),
+            ]
+        return []
+
+    def _fallback_process(self, user_input: str) -> OrchestratorResult:
+        """降级处理：简单规则匹配"""
+        # 简单关键词判断
+        if any(kw in user_input for kw in ["是什么", "怎么", "为什么", "谁", "?", "？"]):
+            intent = IntentType.QUERY
+        elif any(kw in user_input for kw in ["添加", "记录", "告诉", "分享", "决定", "负责", "会议"]):
+            intent = IntentType.STORE
         else:
             intent = IntentType.OTHER
-            tasks = []
+        tasks = self._default_tasks_for_intent(intent, user_input)
 
         return OrchestratorResult(intent=intent, sub_tasks=tasks, success=True)
 
@@ -239,7 +354,6 @@ class OrchestratorAgent:
 
     async def _run_extractor(self, input_data: dict) -> dict:
         """运行提取 Agent"""
-        from src.agents.extractor import ExtractAgent
         # 实际调用时需要注入 client
         return {"status": "extracted", "entities": []}
 

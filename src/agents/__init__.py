@@ -1,11 +1,11 @@
 """
 Agents Module
 """
-from src.agents.orchestrator import OrchestratorAgent, IntentType, OrchestratorResult
-from src.agents.extractor import ExtractAgent, Entity, ExtractResult
-from src.agents.comprehender import ComprehendAgent, Decision, ActionItem, ComprehendResult
-from src.agents.relater import RelateAgent, Relation, GraphUpdate, RelateResult
-from src.agents.store import StoreAgent, StorageResult
+from src.agents.comprehender import ActionItem, ComprehendAgent, ComprehendResult, Decision
+from src.agents.extractor import Entity, ExtractAgent, ExtractResult
+from src.agents.orchestrator import IntentType, OrchestratorAgent, OrchestratorResult
+from src.agents.relater import GraphUpdate, RelateAgent, RelateResult, Relation
+from src.agents.store import StorageResult, StoreAgent
 
 __all__ = [
     "OrchestratorAgent",

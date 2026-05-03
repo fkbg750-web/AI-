@@ -1,13 +1,14 @@
 """
 Agent Tests
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.agents.extractor import ExtractAgent, Entity, ExtractResult
-from src.agents.comprehender import ComprehendAgent, Decision, ActionItem
-from src.agents.relater import RelateAgent, Relation
-from src.agents.orchestrator import OrchestratorAgent, IntentType
+import pytest
+
+from src.agents.comprehender import ComprehendAgent
+from src.agents.extractor import Entity, ExtractAgent, ExtractResult
+from src.agents.orchestrator import IntentType, OrchestratorAgent
+from src.agents.relater import RelateAgent
 
 
 class TestExtractAgent:

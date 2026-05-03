@@ -2,8 +2,6 @@
 Extract Agent - 信息提取器
 从非结构化文本中提取实体和关键信息
 """
-import json
-from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -12,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - used when running mocked tests without deps
     Anthropic = object
 
-from src.agents.utils import maybe_await
+from src.agents.utils import maybe_await, normalize_entity_type, parse_json_object
 
 
 @dataclass
@@ -75,7 +73,7 @@ class ExtractAgent:
         content: str,
         source_type: str = "unknown",
         source_id: str = "",
-        metadata: Optional[dict] = None
+        metadata: dict | None = None
     ) -> ExtractResult:
         """
         提取文本中的实体和信息
@@ -100,8 +98,8 @@ class ExtractAgent:
         result_text = response.content[0].text
 
         try:
-            result_json = json.loads(result_text)
-        except json.JSONDecodeError:
+            result_json = parse_json_object(result_text)
+        except (ValueError, TypeError):
             # 降级处理
             return self._fallback_extract(content, source_type, source_id)
 
@@ -109,7 +107,7 @@ class ExtractAgent:
         entities = []
         for ent_data in result_json.get("entities", []):
             entities.append(Entity(
-                type=ent_data.get("type", "unknown"),
+                type=normalize_entity_type(ent_data.get("type", "Entity")),
                 name=ent_data.get("name", ""),
                 properties=ent_data.get("properties", {})
             ))
@@ -135,7 +133,7 @@ class ExtractAgent:
         content: str,
         source_type: str = "unknown",
         source_id: str = "",
-        metadata: Optional[dict] = None
+        metadata: dict | None = None
     ) -> ExtractResult:
         """Semantic alias for the unified process entrypoint."""
         return await self.process(content, source_type, source_id, metadata)

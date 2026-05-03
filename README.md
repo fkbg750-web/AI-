@@ -60,6 +60,9 @@ docker-compose up -d
 # 安装依赖
 pip install -r requirements.txt
 
+# 安装开发依赖（可选）
+pip install -e ".[dev,demo]"
+
 # 配置环境变量
 cp .env.example .env
 # 编辑 .env 填入你的 API Key
@@ -69,6 +72,14 @@ cd demo && streamlit run app.py
 ```
 
 访问 `http://localhost:8501` 即可体验。
+
+### 本地验证
+
+```bash
+python -m compileall -q src demo tests
+python -m pytest -q -p no:cacheprovider
+python -m src.cli
+```
 
 ---
 
@@ -136,14 +147,15 @@ teammind/
 │   │   ├── extractor.py
 │   │   ├── comprehender.py
 │   │   ├── relater.py
-│   │   └── store.py
+│   │   ├── store.py
+│   │   └── fallback_client.py
 │   ├── knowledge/        # 知识库
 │   │   ├── vector_store.py
 │   │   └── graph_store.py
-│   ├── ingestion/        # 数据摄入（待扩展）
-│   │   └── __init__.py
-│   └── api/              # REST API（待扩展）
-│       └── __init__.py
+│   ├── ingestion/        # 数据摄入
+│   │   └── processor.py
+│   └── api/              # REST API
+│       └── main.py
 ├── demo/
 │   └── app.py            # Streamlit 演示界面
 ├── docker-compose.yml     # 本地服务

@@ -9,7 +9,7 @@ description = "智能团队知识记忆系统 - AI-powered team knowledge memory
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "fkbg750-web", email = "fkbg@email.com"}
 ]
 keywords = ["ai", "knowledge-graph", "rag", "team-collaboration", "claude"]
 classifiers = [
@@ -49,10 +49,10 @@ demo = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/teammind"
-Documentation = "https://github.com/yourusername/teammind#readme"
-Repository = "https://github.com/yourusername/teammind"
-Issues = "https://github.com/yourusername/teammind/issues"
+Homepage = "https://github.com/fkbg750-web/AI-"
+Documentation = "https://github.com/fkbg750-web/AI-#readme"
+Repository = "https://github.com/fkbg750-web/AI-"
+Issues = "https://github.com/fkbg750-web/AI-/issues"
 
 [project.scripts]
 teammind = "src.cli:main"
@@ -72,6 +72,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"
+ignore_missing_imports = true
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = false

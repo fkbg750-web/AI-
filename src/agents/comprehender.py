@@ -3,7 +3,6 @@ Comprehend Agent - 语义理解器
 理解语义、识别决策点、提取行动项
 """
 import json
-from typing import Optional
 from dataclasses import dataclass, field
 
 try:
@@ -11,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - used when running mocked tests without deps
     Anthropic = object
 
-from src.agents.utils import maybe_await, to_plain_dict
+from src.agents.utils import maybe_await, parse_json_object, to_plain_dict
 
 
 @dataclass
@@ -19,7 +18,7 @@ class Decision:
     """决策"""
     content: str
     confidence: float
-    reason: Optional[str] = None
+    reason: str | None = None
     alternatives: list[str] = field(default_factory=list)
 
 
@@ -27,8 +26,8 @@ class Decision:
 class ActionItem:
     """行动项"""
     task: str
-    owner: Optional[str] = None
-    deadline: Optional[str] = None
+    owner: str | None = None
+    deadline: str | None = None
     priority: str = "medium"  # high, medium, low
 
 
@@ -96,7 +95,7 @@ class ComprehendAgent:
     async def process(
         self,
         content: str,
-        extract_result: Optional[dict] = None
+        extract_result: dict | None = None
     ) -> ComprehendResult:
         """
         理解文本内容
@@ -127,8 +126,8 @@ class ComprehendAgent:
         result_text = response.content[0].text
 
         try:
-            result_json = json.loads(result_text)
-        except json.JSONDecodeError:
+            result_json = parse_json_object(result_text)
+        except (ValueError, TypeError):
             return self._fallback_comprehend(content)
 
         # 构建决策列表
@@ -165,8 +164,8 @@ class ComprehendAgent:
     async def comprehend(
         self,
         content: str,
-        entities: Optional[list] = None,
-        extract_result: Optional[dict] = None
+        entities: list | None = None,
+        extract_result: dict | None = None
     ) -> ComprehendResult:
         """Semantic alias for the unified process entrypoint."""
         context = extract_result

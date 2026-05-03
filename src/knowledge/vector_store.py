@@ -2,13 +2,17 @@
 Vector Store - 向量数据库接口
 基于 Qdrant 实现语义检索
 """
-from typing import Optional
-from datetime import datetime
+import hashlib
 import uuid
+from datetime import datetime
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
-from qdrant_client.http.exceptions import UnexpectedResponse
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http.exceptions import UnexpectedResponse
+    from qdrant_client.models import Distance, PointStruct, VectorParams
+except ImportError:  # pragma: no cover - allows importing without optional deps
+    QdrantClient = None
+    Distance = VectorParams = PointStruct = UnexpectedResponse = None
 
 try:
     from openai import OpenAI
@@ -29,7 +33,7 @@ class VectorStore:
     COLLECTION_NAME = "team_knowledge"
     VECTOR_SIZE = 1536  # OpenAI embedding size
 
-    def __init__(self, qdrant_url: str, qdrant_port: int = 6333, openai_api_key: Optional[str] = None):
+    def __init__(self, qdrant_url: str, qdrant_port: int = 6333, openai_api_key: str | None = None):
         """
         初始化向量存储
 
@@ -38,6 +42,9 @@ class VectorStore:
             qdrant_port: Qdrant 端口
             openai_api_key: OpenAI API Key（用于生成 Embedding）
         """
+        if QdrantClient is None:
+            raise ImportError("qdrant-client package is required to use VectorStore")
+
         self.client = QdrantClient(url=qdrant_url, port=qdrant_port)
         self._openai_client = None
 
@@ -75,17 +82,21 @@ class VectorStore:
                 model="text-embedding-3-small",
                 input=text
             )
-            return response.data[0].embedding
-        else:
-            # 降级：返回随机向量（仅用于开发测试）
-            import random
-            return [random.random() for _ in range(self.VECTOR_SIZE)]
+            return list(response.data[0].embedding)
+
+        # 降级：返回确定性伪向量（仅用于开发测试）
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        vector = []
+        for index in range(self.VECTOR_SIZE):
+            byte = digest[index % len(digest)]
+            vector.append((byte / 255.0) * 2 - 1)
+        return vector
 
     async def insert(
         self,
         content: str,
         payload: dict,
-        vector: Optional[list[float]] = None
+        vector: list[float] | None = None
     ) -> str:
         """
         插入文档
@@ -127,7 +138,7 @@ class VectorStore:
         self,
         query: str,
         limit: int = 5,
-        filter_conditions: Optional[dict] = None,
+        filter_conditions: dict | None = None,
         score_threshold: float = 0.7
     ) -> list[dict]:
         """
@@ -174,8 +185,8 @@ class VectorStore:
         self,
         query: str,
         limit: int = 5,
-        info_types: Optional[list[str]] = None,
-        date_range: Optional[tuple[str, str]] = None
+        info_types: list[str] | None = None,
+        date_range: tuple[str, str] | None = None
     ) -> list[dict]:
         """
         混合检索（结合过滤条件）
@@ -237,4 +248,4 @@ class VectorStore:
     async def count(self) -> int:
         """获取文档总数"""
         info = self.client.get_collection(self.COLLECTION_NAME)
-        return info.points_count
+        return int(info.points_count or 0)

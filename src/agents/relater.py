@@ -3,7 +3,6 @@ Relate Agent - 关系关联器
 识别实体间关系，构建和更新知识图谱
 """
 import json
-from typing import Optional
 from dataclasses import dataclass, field
 
 try:
@@ -11,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - used when running mocked tests without deps
     Anthropic = object
 
-from src.agents.utils import maybe_await, to_plain_dict
+from src.agents.utils import maybe_await, parse_json_object, to_plain_dict
 
 
 @dataclass
@@ -27,12 +26,12 @@ class Relation:
 class GraphUpdate:
     """图谱更新操作"""
     operation: str  # upsert_node, upsert_edge, delete_node
-    node_type: Optional[str] = None
-    node_id: Optional[str] = None
-    properties: Optional[dict] = None
-    from_node: Optional[str] = None
-    to_node: Optional[str] = None
-    edge_type: Optional[str] = None
+    node_type: str | None = None
+    node_id: str | None = None
+    properties: dict | None = None
+    from_node: str | None = None
+    to_node: str | None = None
+    edge_type: str | None = None
 
 
 @dataclass
@@ -119,7 +118,7 @@ class RelateAgent:
         self,
         entities: list[dict],
         comprehend_result: dict,
-        existing_context: Optional[dict] = None
+        existing_context: dict | None = None
     ) -> RelateResult:
         """
         分析实体关系
@@ -158,8 +157,8 @@ class RelateAgent:
         result_text = response.content[0].text
 
         try:
-            result_json = json.loads(result_text)
-        except json.JSONDecodeError:
+            result_json = parse_json_object(result_text)
+        except (ValueError, TypeError):
             return self._fallback_relate(entities, comprehend_result)
 
         # 构建关系列表
@@ -167,7 +166,10 @@ class RelateAgent:
             Relation(
                 from_entity=r.get("from_entity", ""),
                 to_entity=r.get("to_entity", ""),
-                relation_type=r.get("relation_type", "related_to"),
+                relation_type=self.RELATION_TYPE_MAP.get(
+                    r.get("relation_type", "related_to"),
+                    r.get("relation_type", "related_to")
+                ),
                 properties=r.get("properties", {})
             )
             for r in result_json.get("relations", [])
@@ -195,8 +197,8 @@ class RelateAgent:
         self,
         entities: list,
         summary: str = "",
-        comprehend_result: Optional[dict] = None,
-        existing_context: Optional[dict] = None
+        comprehend_result: dict | None = None,
+        existing_context: dict | None = None
     ) -> RelateResult:
         """Semantic alias for the unified process entrypoint."""
         entity_dicts = [to_plain_dict(entity) for entity in entities]

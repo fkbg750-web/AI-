@@ -1,15 +1,17 @@
 """
 TeamMind CLI - 命令行入口
 """
-import sys
 import asyncio
-from typing import Optional
 
-import anthropic
+try:
+    import anthropic
+except ImportError:  # pragma: no cover - local smoke tests can use fallback client
+    anthropic = None
 from dotenv import load_dotenv
 
 from src.agents import OrchestratorAgent, StoreAgent
-from src.knowledge import VectorStore, GraphStore
+from src.agents.fallback_client import RuleBasedClient
+from src.knowledge import GraphStore, VectorStore
 
 
 def print_welcome():
@@ -44,7 +46,7 @@ async def add_knowledge(orchestrator: OrchestratorAgent, text: str):
     result = await orchestrator.process(text)
 
     if result.success:
-        print(f"✅ 成功存储到知识库")
+        print(f"✅ {result.final_response or '处理完成'}")
         print(f"   - 提取实体: {len(result.extracted_entities)} 个")
         print(f"   - 理解摘要: {result.comprehended_summary[:50]}...")
         print(f"   - 关联关系: {len(result.related_relations)} 个")
@@ -60,7 +62,7 @@ async def query_knowledge(orchestrator: OrchestratorAgent, question: str):
     if result.success:
         print(f"\n🤖 回答:\n{result.answer}")
         if result.sources:
-            print(f"\n📚 参考来源:")
+            print("\n📚 参考来源:")
             for src in result.sources[:3]:
                 print(f"   - [{src['info_type']}] {src['content'][:60]}...")
     else:
@@ -74,7 +76,15 @@ def main():
     print_welcome()
 
     # 初始化客户端
-    anthropic_client = anthropic.Anthropic()
+    if anthropic is None:
+        print("⚠️  未安装 anthropic，使用本地规则模式\n")
+        anthropic_client = RuleBasedClient()
+    else:
+        try:
+            anthropic_client = anthropic.Anthropic()
+        except Exception as e:
+            print(f"⚠️  Claude 客户端初始化失败，使用本地规则模式: {e}\n")
+            anthropic_client = RuleBasedClient()
 
     # 初始化知识库（需要先启动 Docker Compose）
     try:

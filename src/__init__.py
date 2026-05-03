@@ -6,18 +6,13 @@ TeamMind - 智能团队知识记忆系统
 __version__ = "0.1.0"
 
 from src.agents import (
-    OrchestratorAgent,
-    ExtractAgent,
     ComprehendAgent,
+    ExtractAgent,
+    OrchestratorAgent,
     RelateAgent,
     StoreAgent,
 )
-
-try:
-    from src.knowledge import VectorStore, GraphStore
-except ImportError:  # Optional database dependencies may be absent in unit tests.
-    VectorStore = None
-    GraphStore = None
+from src.knowledge import GraphStore, VectorStore
 
 __all__ = [
     "__version__",

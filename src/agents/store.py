@@ -2,10 +2,10 @@
 Store Agent - 知识存储器
 将处理后的信息写入向量数据库和图数据库
 """
-import json
-from typing import Optional, TYPE_CHECKING
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 try:
     from anthropic import Anthropic
@@ -13,8 +13,8 @@ except ImportError:  # pragma: no cover - used when running mocked tests without
     Anthropic = object
 
 if TYPE_CHECKING:
-    from src.knowledge.vector_store import VectorStore
     from src.knowledge.graph_store import GraphStore
+    from src.knowledge.vector_store import VectorStore
 
 
 @dataclass
@@ -22,9 +22,9 @@ class StorageResult:
     """存储结果"""
     vector_stored: bool
     graph_stored: bool
-    vector_id: Optional[str] = None
+    vector_id: str | None = None
     graph_ids: list[str] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class StoreAgent:
@@ -48,13 +48,19 @@ class StoreAgent:
         self.vector_store = vector_store
         self.graph_store = graph_store
 
+    @staticmethod
+    def _stable_id(prefix: str, value: str) -> str:
+        """Create a stable compact ID for graph nodes."""
+        digest = hashlib.sha256((value or "").encode("utf-8")).hexdigest()[:16]
+        return f"{prefix}_{digest}"
+
     async def process(
         self,
         content: str,
         extract_result: dict,
         comprehend_result: dict,
         relate_result: dict,
-        metadata: Optional[dict] = None
+        metadata: dict | None = None
     ) -> StorageResult:
         """
         存储处理后的知识
@@ -109,7 +115,7 @@ class StoreAgent:
         content: str,
         extract_result: dict,
         comprehend_result: dict,
-        metadata: Optional[dict] = None
+        metadata: dict | None = None
     ) -> str:
         """
         存储到向量数据库
@@ -181,8 +187,9 @@ class StoreAgent:
         for decision in comprehend_result.get("decisions", []):
             node_id = await self.graph_store.upsert_node(
                 node_type="Decision",
-                node_id=f"decision_{hash(decision.get('content', ''))}",
+                node_id=self._stable_id("decision", decision.get("content", "")),
                 properties={
+                    "name": decision.get("content", ""),
                     "content": decision.get("content", ""),
                     "confidence": decision.get("confidence", 0.5),
                     "reason": decision.get("reason", ""),
@@ -196,8 +203,9 @@ class StoreAgent:
         for action in comprehend_result.get("action_items", []):
             node_id = await self.graph_store.upsert_node(
                 node_type="Task",
-                node_id=f"task_{hash(action.get('task', ''))}",
+                node_id=self._stable_id("task", action.get("task", "")),
                 properties={
+                    "name": action.get("task", ""),
                     "content": action.get("task", ""),
                     "owner": action.get("owner", ""),
                     "deadline": action.get("deadline", ""),
@@ -212,9 +220,9 @@ class StoreAgent:
         # 4. 创建关系
         for relation in relate_result.get("relations", []):
             edge_id = await self.graph_store.upsert_edge(
-                from_node=relation.get("from", ""),
-                to_node=relation.get("to", ""),
-                edge_type=relation.get("type", "RELATED_TO"),
+                from_node=relation.get("from") or relation.get("from_entity", ""),
+                to_node=relation.get("to") or relation.get("to_entity", ""),
+                edge_type=relation.get("type") or relation.get("relation_type", "RELATED_TO"),
                 properties=relation.get("properties", {})
             )
             if edge_id:
@@ -231,4 +239,3 @@ class StoreAgent:
             "graph_ids": result.graph_ids,
             "error": result.error
         }
-
