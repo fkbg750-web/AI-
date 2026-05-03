@@ -29,15 +29,12 @@ Orchestrator → Extract / Comprehend / Relate / Store
 ## GitHub 导入
 
 ```bash
-# 方法1: 克隆已有仓库（推送到 GitHub）
-git clone https://github.com/your-username/teammind.git
-cd teammind
-git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git push -u origin master
+# 克隆当前仓库
+git clone https://github.com/fkbg750-web/AI-.git
+cd AI-
 
-# 方法2: 从本地项目创建新仓库
-# 在 GitHub 创建新仓库后：
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+# 如果是从本地已有项目关联 GitHub：
+git remote set-url origin https://github.com/fkbg750-web/AI-.git
 git push -u origin master
 ```
 
@@ -54,8 +51,8 @@ git push -u origin master
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/teammind.git
-cd teammind
+git clone https://github.com/fkbg750-web/AI-.git
+cd AI-
 
 # 启动本地服务（Qdrant + Neo4j）
 docker-compose up -d
@@ -143,10 +140,10 @@ teammind/
 │   ├── knowledge/        # 知识库
 │   │   ├── vector_store.py
 │   │   └── graph_store.py
-│   ├── ingestion/        # 数据摄入
-│   │   └── processor.py
-│   └── api/              # REST API
-│       └── main.py
+│   ├── ingestion/        # 数据摄入（待扩展）
+│   │   └── __init__.py
+│   └── api/              # REST API（待扩展）
+│       └── __init__.py
 ├── demo/
 │   └── app.py            # Streamlit 演示界面
 ├── docker-compose.yml     # 本地服务
@@ -171,7 +168,7 @@ teammind/
 
 | 组件 | 技术选型 |
 |------|---------|
-| LLM | Claude API / GPT-4 |
+| LLM | Claude API |
 | 向量数据库 | Qdrant |
 | 图数据库 | Neo4j |
 | 数据摄入 | n8n |
@@ -189,5 +186,5 @@ MIT License - 详见 [LICENSE](LICENSE)
 
 ## 联系方式
 
-- GitHub Issues: [问题反馈](https://github.com/your-username/teammind/issues)
-- 邮箱: your-email@example.com
+- GitHub Issues: [问题反馈](https://github.com/fkbg750-web/AI-/issues)
+- 邮箱: fkbg@email.com
