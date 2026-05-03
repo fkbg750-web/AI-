@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teammind"
+version = "0.1.0"
+description = "智能团队知识记忆系统 - AI-powered team knowledge memory"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["ai", "knowledge-graph", "rag", "team-collaboration", "claude"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.18.0",
+    "qdrant-client>=1.7.0",
+    "neo4j>=5.14.0",
+    "openai>=1.12.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+demo = [
+    "streamlit>=1.30.0",
+    "pandas>=2.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/teammind"
+Documentation = "https://github.com/yourusername/teammind#readme"
+Repository = "https://github.com/yourusername/teammind"
+Issues = "https://github.com/yourusername/teammind/issues"
+
+[project.scripts]
+teammind = "teammind.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["teammind*"]
+exclude = ["demo*", "docs*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
