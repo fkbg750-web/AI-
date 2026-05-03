@@ -198,4 +198,4 @@ MIT License. See [LICENSE](LICENSE).
 ## Contact
 
 - GitHub Issues: https://github.com/fkbg750-web/AI-/issues
-- Email: fkbg@email.com
+
