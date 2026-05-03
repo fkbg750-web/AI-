@@ -5,9 +5,13 @@ Relate Agent - 关系关联器
 import json
 from typing import Optional
 from dataclasses import dataclass, field
-from datetime import datetime
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except ImportError:  # pragma: no cover - used when running mocked tests without deps
+    Anthropic = object
+
+from src.agents.utils import maybe_await, to_plain_dict
 
 
 @dataclass
@@ -144,12 +148,12 @@ class RelateAgent:
 
 请识别所有有意义的关系，并生成图谱更新指令。"""
 
-        response = self.client.messages.create(
+        response = await maybe_await(self.client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
             system=self.SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
-        )
+        ))
 
         result_text = response.content[0].text
 
@@ -185,6 +189,27 @@ class RelateAgent:
             graph_updates=graph_updates,
             new_nodes=result_json.get("new_nodes", []),
             confidence=result_json.get("confidence", 0.5)
+        )
+
+    async def relate(
+        self,
+        entities: list,
+        summary: str = "",
+        comprehend_result: Optional[dict] = None,
+        existing_context: Optional[dict] = None
+    ) -> RelateResult:
+        """Semantic alias for the unified process entrypoint."""
+        entity_dicts = [to_plain_dict(entity) for entity in entities]
+        context = comprehend_result or {
+            "summary": summary,
+            "decisions": [],
+            "action_items": [],
+            "key_topics": [],
+        }
+        return await self.process(
+            entities=entity_dicts,
+            comprehend_result=context,
+            existing_context=existing_context,
         )
 
     def _fallback_relate(

@@ -12,7 +12,12 @@ from src.agents import (
     RelateAgent,
     StoreAgent,
 )
-from src.knowledge import VectorStore, GraphStore
+
+try:
+    from src.knowledge import VectorStore, GraphStore
+except ImportError:  # Optional database dependencies may be absent in unit tests.
+    VectorStore = None
+    GraphStore = None
 
 __all__ = [
     "__version__",

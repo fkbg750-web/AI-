@@ -130,10 +130,10 @@ def main():
                 print_menu()
 
             elif cmd == "add" and arg:
-                await add_knowledge(orchestrator, arg)
+                asyncio.run(add_knowledge(orchestrator, arg))
 
             elif cmd == "query" and arg:
-                await query_knowledge(orchestrator, arg)
+                asyncio.run(query_knowledge(orchestrator, arg))
 
             elif cmd == "stats":
                 if graph_store:

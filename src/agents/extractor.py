@@ -7,7 +7,12 @@ from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except ImportError:  # pragma: no cover - used when running mocked tests without deps
+    Anthropic = object
+
+from src.agents.utils import maybe_await
 
 
 @dataclass
@@ -85,12 +90,12 @@ class ExtractAgent:
             ExtractResult: 提取结果
         """
         # 调用 LLM 提取
-        response = self.client.messages.create(
+        response = await maybe_await(self.client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
             system=self.SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}]
-        )
+        ))
 
         result_text = response.content[0].text
 
@@ -124,6 +129,16 @@ class ExtractAgent:
             key_points=result_json.get("key_points", []),
             raw_output=result_json
         )
+
+    async def extract(
+        self,
+        content: str,
+        source_type: str = "unknown",
+        source_id: str = "",
+        metadata: Optional[dict] = None
+    ) -> ExtractResult:
+        """Semantic alias for the unified process entrypoint."""
+        return await self.process(content, source_type, source_id, metadata)
 
     def _fallback_extract(
         self,

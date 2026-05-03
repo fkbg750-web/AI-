@@ -5,9 +5,13 @@ Comprehend Agent - 语义理解器
 import json
 from typing import Optional
 from dataclasses import dataclass, field
-from datetime import datetime
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except ImportError:  # pragma: no cover - used when running mocked tests without deps
+    Anthropic = object
+
+from src.agents.utils import maybe_await, to_plain_dict
 
 
 @dataclass
@@ -113,12 +117,12 @@ class ComprehendAgent:
 
         prompt = f"""请分析以下内容：\n\n{content}{context}"""
 
-        response = self.client.messages.create(
+        response = await maybe_await(self.client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
             system=self.SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
-        )
+        ))
 
         result_text = response.content[0].text
 
@@ -157,6 +161,18 @@ class ComprehendAgent:
             key_topics=result_json.get("key_topics", []),
             raw_output=result_json
         )
+
+    async def comprehend(
+        self,
+        content: str,
+        entities: Optional[list] = None,
+        extract_result: Optional[dict] = None
+    ) -> ComprehendResult:
+        """Semantic alias for the unified process entrypoint."""
+        context = extract_result
+        if context is None and entities is not None:
+            context = {"entities": [to_plain_dict(entity) for entity in entities]}
+        return await self.process(content=content, extract_result=context)
 
     def _fallback_comprehend(self, content: str) -> ComprehendResult:
         """降级理解：简单处理"""

@@ -55,11 +55,11 @@ Repository = "https://github.com/yourusername/teammind"
 Issues = "https://github.com/yourusername/teammind/issues"
 
 [project.scripts]
-teammind = "teammind.cli:main"
+teammind = "src.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["teammind*"]
+include = ["src*"]
 exclude = ["demo*", "docs*"]
 
 [tool.ruff]

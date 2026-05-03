@@ -3,11 +3,18 @@ Store Agent - 知识存储器
 将处理后的信息写入向量数据库和图数据库
 """
 import json
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except ImportError:  # pragma: no cover - used when running mocked tests without deps
+    Anthropic = object
+
+if TYPE_CHECKING:
+    from src.knowledge.vector_store import VectorStore
+    from src.knowledge.graph_store import GraphStore
 
 
 @dataclass
@@ -225,7 +232,3 @@ class StoreAgent:
             "error": result.error
         }
 
-
-# 类型提示引用（避免循环导入）
-from src.knowledge.vector_store import VectorStore
-from src.knowledge.graph_store import GraphStore

@@ -7,13 +7,20 @@ from typing import Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-from anthropic import Anthropic
+try:
+    from anthropic import Anthropic
+except ImportError:  # pragma: no cover - used when running mocked tests without deps
+    Anthropic = object
+
+from src.agents.utils import maybe_await
 
 
 class IntentType(Enum):
     """用户意图类型"""
-    QA = "qa"                    # 问答
-    ADD_KNOWLEDGE = "add_knowledge"  # 添加知识
+    QUERY = "query"              # 查询
+    STORE = "store"              # 存储知识
+    QA = "query"                 # 兼容旧命名
+    ADD_KNOWLEDGE = "store"      # 兼容旧命名
     QUERY_RELATIONS = "query_relations"  # 查询关系
     SUMMARY = "summary"          # 摘要总结
     OTHER = "other"
@@ -33,8 +40,15 @@ class OrchestratorResult:
     """编排结果"""
     intent: IntentType
     sub_tasks: list[Task]
+    success: bool = True
     final_response: Optional[str] = None
     context_used: list[dict] = field(default_factory=list)
+    answer: Optional[str] = None
+    sources: list[dict] = field(default_factory=list)
+    extracted_entities: list[dict] = field(default_factory=list)
+    comprehended_summary: str = ""
+    related_relations: list[dict] = field(default_factory=list)
+    error: Optional[str] = None
 
 
 class OrchestratorAgent:
@@ -78,8 +92,9 @@ class OrchestratorAgent:
 }
 """
 
-    def __init__(self, anthropic_client: Anthropic):
+    def __init__(self, anthropic_client: Anthropic, store_agent=None):
         self.client = anthropic_client
+        self.store_agent = store_agent
 
     async def process(self, user_input: str, context: Optional[dict] = None) -> OrchestratorResult:
         """
@@ -102,12 +117,12 @@ class OrchestratorAgent:
 请分析用户意图并制定任务计划。"""
 
         # 调用 LLM
-        response = self.client.messages.create(
+        response = await maybe_await(self.client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
             system=self.SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
-        )
+        ))
 
         # 解析响应
         result_text = response.content[0].text
@@ -118,7 +133,7 @@ class OrchestratorAgent:
             return self._fallback_process(user_input)
 
         # 构建返回结果
-        intent = IntentType(result_json.get("intent", "other"))
+        intent = self._parse_intent(result_json.get("intent", "other"))
         sub_tasks = [
             Task(
                 name=t["name"],
@@ -131,14 +146,47 @@ class OrchestratorAgent:
 
         return OrchestratorResult(
             intent=intent,
-            sub_tasks=sub_tasks
+            sub_tasks=sub_tasks,
+            success=True,
         )
+
+    async def query(self, question: str, context: Optional[dict] = None) -> OrchestratorResult:
+        """Build a minimal query result for CLI/tests until full retrieval lands."""
+        context = context or {}
+        sources = context.get("sources", [])
+        answer = context.get("answer") or "查询流程已识别，等待接入混合检索结果。"
+        return OrchestratorResult(
+            intent=IntentType.QUERY,
+            sub_tasks=[
+                Task(name="检索知识", agent="retrieve", input_data={"query": question}),
+                Task(name="生成回答", agent="generate", input_data={"query": question}),
+            ],
+            success=True,
+            answer=answer,
+            final_response=answer,
+            sources=sources,
+            context_used=sources,
+        )
+
+    def _parse_intent(self, value: str) -> IntentType:
+        """Normalize old and new intent names."""
+        normalized = (value or "other").lower()
+        aliases = {
+            "qa": "query",
+            "add_knowledge": "store",
+            "knowledge": "store",
+        }
+        normalized = aliases.get(normalized, normalized)
+        try:
+            return IntentType(normalized)
+        except ValueError:
+            return IntentType.OTHER
 
     def _fallback_process(self, user_input: str) -> OrchestratorResult:
         """降级处理：简单规则匹配"""
         # 简单关键词判断
         if any(kw in user_input for kw in ["是什么", "怎么", "为什么", "谁", "?"]):
-            intent = IntentType.QA
+            intent = IntentType.QUERY
             tasks = [
                 Task(
                     name="检索知识",
@@ -147,7 +195,7 @@ class OrchestratorAgent:
                 )
             ]
         elif any(kw in user_input for kw in ["添加", "记录", "告诉", "分享"]):
-            intent = IntentType.ADD_KNOWLEDGE
+            intent = IntentType.STORE
             tasks = [
                 Task(name="提取信息", agent="extract", input_data={"content": user_input}),
                 Task(name="理解语义", agent="comprehend", input_data={}, depends_on=["提取信息"]),
@@ -158,7 +206,7 @@ class OrchestratorAgent:
             intent = IntentType.OTHER
             tasks = []
 
-        return OrchestratorResult(intent=intent, sub_tasks=tasks)
+        return OrchestratorResult(intent=intent, sub_tasks=tasks, success=True)
 
     async def dispatch_task(self, task: Task, previous_results: dict) -> dict:
         """
