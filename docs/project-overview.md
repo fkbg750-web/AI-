@@ -1,6 +1,6 @@
 # TeamMind - 智能团队知识记忆系统
 
-## 项目描述（Creator Incentive Program 申请）
+## 项目概述
 
 ### 一、核心痛点
 
@@ -67,6 +67,6 @@ Orchestrator Agent（意图识别）
 
 ### 六、现状与计划
 
-MVP 已完成，包含：4 Agent 核心逻辑、Qdrant/Neo4j 集成、Streamlit 演示界面、CLI 工具、CI/CD 流水线。
+当前项目已具备可运行基线，包含：Agent 核心逻辑、Qdrant/Neo4j 适配层、Streamlit 演示界面、CLI 工具、FastAPI 最小入口和测试基线。
 
-下一步计划：Slack/Notion 自动化摄入、多轮对话支持、移动端 App。
+下一步计划：Slack/Notion 自动化摄入、多轮对话支持、权限模型和更完整的混合检索。
