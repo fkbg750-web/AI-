@@ -26,6 +26,23 @@ Orchestrator → Extract / Comprehend / Relate / Store
 
 ---
 
+## GitHub 导入
+
+```bash
+# 方法1: 克隆已有仓库（推送到 GitHub）
+git clone https://github.com/your-username/teammind.git
+cd teammind
+git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin master
+
+# 方法2: 从本地项目创建新仓库
+# 在 GitHub 创建新仓库后：
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin master
+```
+
+---
+
 ## 快速开始
 
 ### 前置要求
