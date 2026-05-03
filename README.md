@@ -167,7 +167,7 @@ teammind/
 
 ## 在线演示
 
-**Streamlit Cloud**: [待部署]
+**Streamlit Cloud**:  [待部署]
 
 演示功能：
 - 自然语言问答（基于示例数据）
